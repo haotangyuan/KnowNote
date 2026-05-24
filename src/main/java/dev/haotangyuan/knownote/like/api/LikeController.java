@@ -4,6 +4,7 @@ import dev.haotangyuan.knownote.common.Result;
 import dev.haotangyuan.knownote.like.api.dto.req.LikePostReqDTO;
 import dev.haotangyuan.knownote.like.api.dto.resp.LikeStatusRespDTO;
 import dev.haotangyuan.knownote.like.service.LikeService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -14,6 +15,7 @@ import java.util.List;
 /**
  * 点赞控制器
  */
+@Tag(name = "点赞", description = "点赞/取消点赞、状态查询")
 @RestController
 @RequestMapping("/api/v1/like")
 @RequiredArgsConstructor

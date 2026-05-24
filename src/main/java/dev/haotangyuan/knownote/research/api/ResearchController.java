@@ -9,6 +9,7 @@ import dev.haotangyuan.knownote.research.api.dto.resp.ResearchMessageRespDTO;
 import dev.haotangyuan.knownote.research.api.dto.resp.ResearchStatusRespDTO;
 import dev.haotangyuan.knownote.research.api.dto.resp.SendMessageRespDTO;
 import dev.haotangyuan.knownote.research.service.ResearchService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -18,6 +19,7 @@ import java.util.List;
 /**
  * 研究模块接口
  */
+@Tag(name = "深度研究", description = "创建研究会话、发送消息、SSE 事件流")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/research")

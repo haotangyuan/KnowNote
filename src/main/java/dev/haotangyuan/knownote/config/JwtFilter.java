@@ -35,7 +35,12 @@ public class JwtFilter implements Filter {
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/v1/auth/**",
             "/actuator/**",
-            "/error"
+            "/error",
+            "/v3/api-docs/**",
+            "/docs/**",
+            "/scalar/**",
+            "/webjars/**",
+            "/favicon.ico"
     );
 
     @Override

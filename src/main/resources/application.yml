@@ -88,3 +88,11 @@ google:
 
 time:
   timezone: ${TIME_TIMEZONE:Asia/Shanghai}
+
+########## SpringDoc OpenAPI 3.0 + Scalar ##########
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+scalar:
+  path: /docs

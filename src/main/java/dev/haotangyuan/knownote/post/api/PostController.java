@@ -8,6 +8,7 @@ import dev.haotangyuan.knownote.post.api.dto.resp.CreatePostRespDTO;
 import dev.haotangyuan.knownote.post.api.dto.resp.PostRespDTO;
 import dev.haotangyuan.knownote.post.api.dto.resp.PostVersionRespDTO;
 import dev.haotangyuan.knownote.post.service.PostService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 帖子接口
  */
+@Tag(name = "文章", description = "创建、编辑、发布、审核、版本管理")
 @RestController
 @RequiredArgsConstructor
 @ConditionalOnExpression("not '${oss.endpoint:}'.blank and not '${rocketmq.name-server:}'.blank")

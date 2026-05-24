@@ -6,6 +6,7 @@ import dev.haotangyuan.knownote.user.api.dto.req.UpdatePasswordReqDTO;
 import dev.haotangyuan.knownote.user.api.dto.req.UpdateProfileReqDTO;
 import dev.haotangyuan.knownote.user.api.dto.resp.UserMeRespDTO;
 import dev.haotangyuan.knownote.user.service.UserService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 用户接口
  */
+@Tag(name = "用户", description = "个人资料、密码修改")
 @RestController
 @RequestMapping("/api/v1/user")
 @RequiredArgsConstructor

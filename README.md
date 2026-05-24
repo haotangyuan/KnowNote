@@ -338,6 +338,8 @@ java -jar target/KnowNote-0.0.1-SNAPSHOT.jar
 
 应用启动后访问 `http://localhost:8080`。
 
+**API 文档**：`http://localhost:8080/docs`（Scalar UI），无需登录即可浏览全部接口。
+
 验证启动成功：
 
 ```bash

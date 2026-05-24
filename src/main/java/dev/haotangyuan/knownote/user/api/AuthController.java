@@ -4,6 +4,7 @@ import dev.haotangyuan.knownote.common.Result;
 import dev.haotangyuan.knownote.user.api.dto.req.*;
 import dev.haotangyuan.knownote.user.api.dto.resp.TokenRespDTO;
 import dev.haotangyuan.knownote.user.service.AuthService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 认证接口
  */
+@Tag(name = "认证", description = "注册、登录、Token 刷新")
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

@@ -1,5 +1,6 @@
 package dev.haotangyuan.knownote.storage.api;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 存储接口
  */
+@Tag(name = "存储", description = "获取预签名上传 URL")
 @RestController
 @RequiredArgsConstructor
 @ConditionalOnExpression("not '${oss.endpoint:}'.blank")
