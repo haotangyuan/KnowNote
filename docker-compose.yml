@@ -1,0 +1,49 @@
+services:
+  namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: rmq-namesrv
+    ports:
+      - "9876:9876"
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT_EXT: "-Xms256m -Xmx256m"
+    networks:
+      - knownote-net
+
+  broker:
+    image: apache/rocketmq:5.3.1
+    container_name: rmq-broker
+    ports:
+      - "10911:10911"
+      - "10909:10909"
+    environment:
+      JAVA_OPT_EXT: "-Xms512m -Xmx512m"
+    command: sh mqbroker -n namesrv:9876 -c /home/rocketmq/conf/broker.conf
+    volumes:
+      - ./rocketmq-broker.conf:/home/rocketmq/conf/broker.conf
+    depends_on:
+      - namesrv
+    networks:
+      - knownote-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - knownote-net
+
+networks:
+  knownote-net:
+    driver: bridge
+
+volumes:
+  minio-data:

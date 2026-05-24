@@ -1,0 +1,90 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: KnowNote
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/db_knownote?useUnicode=true&characterEncoding=utf8&serverTimezone=${TIME_TIMEZONE:Asia/Shanghai}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: ${TIME_TIMEZONE:Asia/Shanghai}
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  secret: ${JWT_SECRET:knownote-dev-secret-key-change-in-production}
+  expiration: 900000
+  refresh-expiration: 604800000
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:}
+  producer:
+    group: knownote-producer
+  consumer:
+    group: knownote-consumer
+
+review-ai:
+  base-url: ${REVIEW_AI_BASE_URL:}
+  api-key: ${REVIEW_AI_API_KEY:}
+  model: ${REVIEW_AI_MODEL:}
+  enabled: ${REVIEW_AI_ENABLED:true}
+
+tavily:
+  api-key: ${TAVILY_API_KEY:}
+  base-url: ${TAVILY_BASE_URL:https://api.tavily.com}
+
+research:
+  model:
+    id: ${RESEARCH_MODEL_ID:default}
+    name: ${RESEARCH_MODEL_NAME:default}
+    model: ${RESEARCH_MODEL:}
+    base-url: ${RESEARCH_MODEL_BASE_URL:}
+    api-key: ${RESEARCH_MODEL_API_KEY:}
+  async:
+    max-pool-size: 10
+    queue-capacity: 50
+    task-timeout-minutes: 3
+  budget:
+    levels:
+      MEDIUM:
+        max-conduct-count: 2
+        max-search-count: 2
+        max-concurrent-units: 1
+      HIGH:
+        max-conduct-count: 4
+        max-search-count: 3
+        max-concurrent-units: 2
+      ULTRA:
+        max-conduct-count: 6
+        max-search-count: 4
+        max-concurrent-units: 3
+
+oss:
+  endpoint: ${OSS_ENDPOINT:}
+  public-url: ${OSS_PUBLIC_URL:}
+  public-bucket: ${OSS_PUBLIC_BUCKET:}
+  private-bucket: ${OSS_PRIVATE_BUCKET:}
+  access-key-id: ${OSS_ACCESS_KEY_ID:}
+  secret-access-key: ${OSS_SECRET_ACCESS_KEY:}
+
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from: ${RESEND_FROM:}
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID:}
+  client-secret: ${GOOGLE_CLIENT_SECRET:}
+  redirect-uri: ${GOOGLE_REDIRECT_URI:}
+
+time:
+  timezone: ${TIME_TIMEZONE:Asia/Shanghai}
