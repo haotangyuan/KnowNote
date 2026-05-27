@@ -46,6 +46,29 @@ public class ResearcherAgent {
     private final EventPublisher eventPublisher;
 
     private static final String RESEARCHER_STAGE = ResearcherTool.class.getSimpleName();
+    private static final String TOOL_TAVILY_SEARCH = "tavilySearch";
+    private static final String TOOL_THINK = "thinkTool";
+
+    /** Package-private for testing. Returns null on parse failure or missing query. */
+    static SearchArgs parseSearchArgs(ObjectMapper objectMapper, String arguments) {
+        try {
+            var argsNode = objectMapper.readTree(arguments);
+            if (argsNode == null || !argsNode.has("query")) {
+                return null;
+            }
+            String query = argsNode.get("query").asText();
+            if (cn.hutool.core.util.StrUtil.isBlank(query)) {
+                return null;
+            }
+            int maxResults = argsNode.has("maxResults") ? argsNode.get("maxResults").asInt() : 3;
+            String topic = argsNode.has("topic") ? argsNode.get("topic").asText() : "general";
+            return new SearchArgs(query, maxResults, topic);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    record SearchArgs(String query, int maxResults, String topic) {}
 
     public String run(DeepResearchState state) {
         log.info("ResearcherAgent run: researchId='{}', topic='{}'", state.getResearchId(), state.getResearchTopic());
@@ -102,9 +125,9 @@ public class ResearcherAgent {
         }
 
         for (ToolExecutionRequest toolExecutionRequest : toolExecutionRequests) {
-            String result;
+            String result = "";
 
-            if ("tavilySearch".equals(toolExecutionRequest.name())) {
+            if (TOOL_TAVILY_SEARCH.equals(toolExecutionRequest.name())) {
                 int maxSearchCount = state.getBudget().getMaxSearchCount();
                 if (state.getSearchCount() >= maxSearchCount) {
                     log.warn("tavilySearch count limit reached: {}/{}",
@@ -114,22 +137,10 @@ public class ResearcherAgent {
                     continue;
                 }
 
-                String query;
-                int maxResults;
-                String topic;
-                try {
-                    var argsNode = objectMapper.readTree(toolExecutionRequest.arguments());
-                    if (argsNode == null || !argsNode.has("query")) {
-                        result = "缺少必填参数 query，请重新调用并提供搜索关键词";
-                        agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
-                        continue;
-                    }
-                    query = argsNode.get("query").asText();
-                    maxResults = argsNode.has("maxResults") ? argsNode.get("maxResults").asInt() : 3;
-                    topic = argsNode.has("topic") ? argsNode.get("topic").asText() : "general";
-                } catch (Exception e) {
-                    log.error("Failed to parse tavilySearch arguments for researchId={}", state.getResearchId(), e);
-                    result = "工具参数解析失败，请重新调用并提供正确的JSON格式";
+                SearchArgs args = parseSearchArgs(objectMapper, toolExecutionRequest.arguments());
+                if (args == null) {
+                    log.error("Failed to parse tavilySearch arguments for researchId={}", state.getResearchId());
+                    result = "工具参数解析失败或缺少必填参数 query，请重新调用并提供正确的JSON格式";
                     agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
                     continue;
                 }
@@ -137,19 +148,22 @@ public class ResearcherAgent {
                 state.setSearchResults(new HashMap<>());
                 state.setSearchNotes(new ArrayList<>());
 
-                result = searchAgent.run(query, maxResults, topic, state.getCurrentResearchEventId(), state);
+                result = searchAgent.run(args.query(), args.maxResults(), args.topic(),
+                        state.getCurrentResearchEventId(), state);
 
                 state.setSearchCount(state.getSearchCount() + 1);
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {
                     log.warn("No executor found for tool {} in stage {}", toolExecutionRequest.name(), RESEARCHER_STAGE);
+                    result = "Tool not available";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
                     continue;
                 }
                 result = executor.execute(toolExecutionRequest, null);
             }
 
-            if ("thinkTool".equals(toolExecutionRequest.name())) {
+            if (TOOL_THINK.equals(toolExecutionRequest.name())) {
                 eventPublisher.publishEvent(state.getResearchId(), EventType.RESEARCH,
                         "分析中...", result, state.getCurrentResearchEventId());
             }
@@ -179,8 +193,11 @@ public class ResearcherAgent {
         String compressedResearch = compressResponse.aiMessage().text();
 
         state.setCompressedResearch(compressedResearch);
+        String preview = compressedResearch.length() > 200
+                ? compressedResearch.substring(0, 200) + "..."
+                : compressedResearch;
         eventPublisher.publishEvent(state.getResearchId(), EventType.RESEARCH,
-                "已完成该主题研究", compressedResearch.substring(0, Math.min(200, compressedResearch.length())) + "...", state.getCurrentResearchEventId());
+                "已完成该主题研究", preview, state.getCurrentResearchEventId());
 
         return compressedResearch;
     }

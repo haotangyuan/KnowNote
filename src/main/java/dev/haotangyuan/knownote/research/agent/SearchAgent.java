@@ -49,7 +49,7 @@ public class SearchAgent {
                 .build();
 
         plan(query, maxResults, topic, searchEventId, state);
-        action(agent, searchEventId, state);
+        action(agent, state);
         return summarize(query, searchEventId, agent, state);
     }
 
@@ -79,7 +79,7 @@ public class SearchAgent {
                 "找到 " + uniqueResults.size() + " 个相关结果", null, searchEventId);
     }
 
-    private void action(AgentAbility agent, Long searchEventId, DeepResearchState state) {
+    private void action(AgentAbility agent, DeepResearchState state) {
         if (state.getSearchResults() == null || state.getSearchResults().isEmpty()) {
             log.warn("No search results to process");
             return;
@@ -104,7 +104,7 @@ public class SearchAgent {
                     );
                     state.getSearchNotes().add(formatted);
                 } catch (Exception e) {
-                    log.warn("Failed to summarize {}", result.url());
+                    log.warn("Failed to summarize {}: {}", result.url(), e.getMessage(), e);
                     state.getSearchNotes().add(StrUtil.format("[{title}]\nURL: {url}\n{content}",
                         Map.of(
                             "title", result.title(),
