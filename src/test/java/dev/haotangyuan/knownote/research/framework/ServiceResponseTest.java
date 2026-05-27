@@ -25,6 +25,7 @@ class ServiceResponseTest {
         assertThat(r.errorMessage()).isEqualTo("something failed");
         assertThat(r.isOk()).isFalse();
         assertThat(r.isError()).isTrue();
+        assertThat(r.isQuotaExceeded()).isFalse();
     }
 
     @Test
@@ -33,5 +34,7 @@ class ServiceResponseTest {
         assertThat(r.status()).isEqualTo(ServiceResponse.Status.QUOTA_EXCEEDED);
         assertThat(r.isQuotaExceeded()).isTrue();
         assertThat(r.errorMessage()).isEqualTo("limit reached");
+        assertThat(r.isOk()).isFalse();
+        assertThat(r.isError()).isFalse();
     }
 }

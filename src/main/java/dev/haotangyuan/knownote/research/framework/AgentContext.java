@@ -3,6 +3,7 @@ package dev.haotangyuan.knownote.research.framework;
 import dev.haotangyuan.knownote.config.ResearchProperties;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -14,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Builder
 public class AgentContext {
 
+    @NonNull
     private final String researchId;
     private final ResearchProperties.BudgetLevel budget;
 
@@ -35,5 +37,13 @@ public class AgentContext {
 
     public void addOutputTokens(long count) {
         totalOutputTokens.addAndGet(count);
+    }
+
+    public int incrementConductCount() {
+        return conductCount.incrementAndGet();
+    }
+
+    public int incrementSearchCount() {
+        return searchCount.incrementAndGet();
     }
 }
