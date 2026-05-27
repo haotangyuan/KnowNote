@@ -23,8 +23,8 @@ mybatis:
 
 jwt:
   secret: ${JWT_SECRET:knownote-dev-secret-key-change-in-production}
-  expiration: 900000
-  refresh-expiration: 604800000
+  expiration: 86400000
+  refresh-expiration: 2592000000
 
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:}

@@ -1,8 +1,10 @@
 package dev.haotangyuan.knownote.post.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import dev.haotangyuan.knownote.post.domain.enums.PostStatus;
 import dev.haotangyuan.knownote.post.domain.enums.PostType;
 import lombok.AllArgsConstructor;
@@ -19,7 +21,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@TableName("post")
+@TableName(value = "post", autoResultMap = true)
 public class PostDO {
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -29,6 +31,7 @@ public class PostDO {
 
     private String title;
     private String description;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private String tags;
     private String coverUrl;
     private Integer isTop;
@@ -37,6 +40,7 @@ public class PostDO {
     private String contentSha256;
 
     private String rejectReason;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private String imgUrls;
     private String publishedVersion;
 
