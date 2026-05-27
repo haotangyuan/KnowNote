@@ -75,3 +75,15 @@ CREATE TABLE IF NOT EXISTS workflow_event (
     KEY idx_research_seq (research_id, sequence_no),
     KEY idx_parent (parent_event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工作流事件';
+
+-- Studio 项目表
+CREATE TABLE IF NOT EXISTS `studio_project` (
+    `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '项目ID',
+    `user_id`     BIGINT UNSIGNED NOT NULL COMMENT '所属用户ID',
+    `name`        VARCHAR(255)    NOT NULL COMMENT '项目名称',
+    `description` VARCHAR(512)    DEFAULT NULL COMMENT '项目描述',
+    `status`      VARCHAR(20)     NOT NULL DEFAULT 'INIT' COMMENT '状态: INIT/ACTIVE/DELETED',
+    `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Studio项目表';

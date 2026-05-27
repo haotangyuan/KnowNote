@@ -1,14 +1,25 @@
-# KnowNote — 知识写作平台
+# KnowNote
 
-基于 Spring Boot 3 的知识写作与深度研究平台，提供 AI 多智能体协作研究、文章版本管理、内容审核等功能。
+KnowNote 是一个基于 Spring Boot 3 的知识写作与 AI 研究平台，提供 AI 多智能体深度研究、类 Bolt.new 的浏览器端 AI 代码生成（Studio）、Markdown 文章版本管理与内容审核等功能。
 
-## 功能特性
+## 核心功能
 
-- **用户认证** — 邮箱验证码/密码登录 + Google OAuth，JWT 双令牌（access + refresh）
-- **深度研究** — 多智能体协作（ScopeAgent → SupervisorAgent → ResearcherAgent → ReportAgent），SSE 实时推送进度
-- **文章管理** — Markdown 编辑、版本历史、草稿/发布状态、版本回滚
-- **内容审核** — RocketMQ 异步审核，LLM 判定合规性后自动流转状态
-- **点赞系统** — 异步消息队列聚合计数
+### 深度研究
+多智能体协作工作流（ScopeAgent → SupervisorAgent → ResearcherAgent → ReportAgent），通过 SSE 实时推送每一个研究阶段的进度，最终生成结构化研究报告。
+
+### Studio — AI 代码生成
+类 Bolt.new 的浏览器端 IDE。用户通过对话描述需求，AI 分两阶段（架构设计 + 代码生成）输出完整项目文件，代码实时写入 Docker 沙盒容器并在浏览器内预览运行效果。
+
+### 文章管理
+Markdown 富文本编辑，支持草稿 / 发布 / 版本历史 / 一键回滚。封面和正文通过 MinIO 预签名 URL 直传，不经过后端。
+
+### 内容审核
+发布触发 RocketMQ 异步消息，LLM 对内容进行合规性判断，自动流转 DRAFT → REVIEWING → PUBLISHED / REJECTED 状态机。
+
+### 用户认证
+邮箱验证码 / 密码双通道登录，支持 Google OAuth。JWT 双令牌（access + refresh）机制，refresh token 存入 Redis 支持多端登出。
+
+---
 
 ## 技术栈
 
@@ -22,11 +33,15 @@
 | 消息队列 | RocketMQ | 5.3.1（rocketmq-spring-boot-starter 2.3.1） |
 | 对象存储 | MinIO（S3 兼容） | latest（AWS SDK S3 2.25.45） |
 | LLM 框架 | LangChain4j | 1.8.0 |
+| Studio 沙盒 | Node.js 20 + Fastify + Dockerode | latest |
+| Studio 前端 | React 18 + Vite + Monaco Editor | — |
 | API 文档 | SpringDoc OpenAPI + Scalar UI | 2.8.14 |
 | 邮件 | Resend | — |
 | 认证 | JWT（jjwt）+ jBCrypt | jjwt 0.12.6 / jBCrypt 0.4 |
 | 工具库 | Hutool / Lombok | Hutool 5.8.34 / Lombok 1.18.34 |
 | Google OAuth | Google API Client | 2.7.2 |
+
+---
 
 ## 系统架构
 
@@ -34,17 +49,23 @@
 flowchart TB
     subgraph Client[客户端]
         FE[Web / Frontend]
+        Studio[Studio Frontend\nlocalhost:5173]
     end
 
-    subgraph Backend[后端服务]
+    subgraph Backend[Spring Boot 后端 :8080]
         API[REST API]
-        SSE[SSE Hub]
+        SSE[SseHub]
         Queue[ResearchTaskExecutor]
         Pipeline[AgentPipeline]
-        MQ[RocketMQ]
+        MQ[RocketMQ Consumer]
         Review[PostReviewService]
-        StorageSvc[StorageService]
-        Auth[AuthService]
+        StudioSvc[StudioProjectService]
+    end
+
+    subgraph StudioService[Studio Service :3001]
+        CM[ContainerManager]
+        FS[FileService]
+        Proxy[Preview Proxy]
     end
 
     subgraph External[外部服务]
@@ -54,136 +75,58 @@ flowchart TB
         Resend[Resend Email]
     end
 
-    subgraph Storage[存储层]
+    subgraph Storage[存储]
         MySQL[(MySQL)]
         Redis[(Redis)]
-        MinIO[(MinIO S3)]
+        MinIO[(MinIO)]
+        Docker[(Docker 沙盒)]
     end
 
-    FE -->|HTTP| API
-    FE ---|SSE| SSE
-    FE -->|预签名直传| MinIO
-    API --> Queue
-    API --> MQ
-    API --> StorageSvc
-    API --> Auth
+    FE -->|HTTP / SSE| API
+    Studio --> API
+    API --> StudioSvc
+    StudioSvc -->|HTTP| StudioService
+    CM --> Docker
+    FS --> Docker
+    Proxy --> Docker
     Queue --> Pipeline
     Pipeline --> LLM
     Pipeline --> Tavily
     Pipeline --> SSE
     SSE --> Redis
+    MQ --> Review
+    Review --> LLM
     API --> MySQL
     API --> Redis
-    StorageSvc --> MinIO
-    Auth --> Google
-    Auth --> Resend
-    MQ --> Review
-    Review -->|审核| LLM
-    Review --> MySQL
-    Review --> MinIO
+    API --> MinIO
 ```
 
-### 智能体工作流
+### 深度研究智能体工作流
 
 ```mermaid
 flowchart LR
-    subgraph Phase1[Phase 1: Scope]
-        Input[用户输入]
-        Scope[ScopeAgent]
-        Input --> Scope
-        Scope -->|需要澄清| Clarify[返回问题]
-        Scope -->|需求明确| Brief[生成 ResearchBrief]
+    subgraph Phase1[Phase 1 · Scope]
+        Input[用户输入] --> Scope[ScopeAgent]
+        Scope -->|需要澄清| Q[返回问题]
+        Scope -->|需求明确| Brief[ResearchBrief]
     end
 
-    subgraph Phase2[Phase 2: Research]
+    subgraph Phase2[Phase 2 · Research]
         Supervisor[SupervisorAgent]
         Researcher[ResearcherAgent]
-        Search[SearchAgent]
-        Tavily[Tavily Search]
-
+        Search[SearchAgent + Tavily]
         Supervisor -->|conductResearch| Researcher
         Researcher -->|tavilySearch| Search
-        Search --> Tavily
-        Search -->|摘要/要点| Researcher
-        Researcher -->|压缩研究结果| Supervisor
+        Search -->|摘要要点| Researcher
+        Researcher -->|压缩结果| Supervisor
     end
 
-    subgraph Phase3[Phase 3: Report]
-        Report[ReportAgent]
+    subgraph Phase3[Phase 3 · Report]
+        Report[ReportAgent] --> Final[最终报告]
     end
 
     Brief --> Supervisor
     Supervisor -->|researchComplete| Report
-    Report --> Final[最终报告]
-```
-
-### 异步任务队列
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant RC as ResearchController
-    participant RS as ResearchService
-    participant AOP as @QueuedAsync Aspect
-    participant Q as ResearchTaskExecutor
-    participant EP as EventPublisher
-    participant S as SseHub
-    participant P as AgentPipeline
-
-    C->>RC: POST /api/v1/research/{id}/messages
-    RC->>RS: sendMessage
-    RS->>RS: CAS 更新状态为 QUEUE
-    RS->>AOP: agentPipeline.run(state)
-    AOP->>Q: submit(task)
-    Q->>EP: publishTempEvent(QUEUE)
-    EP->>S: 推送预计执行时间
-    S-->>C: SSE: 排队中，预计 HH:mm 开始执行
-    RS-->>C: 200 已接受任务
-
-    Q->>P: execute
-    P->>EP: 事件/消息入库 + 缓存
-    EP->>S: 推送研究进度
-    S-->>C: SSE: 实时事件流
-```
-
-### SSE 断线重连
-
-```mermaid
-flowchart LR
-    EP[EventPublisher] --> CU[CacheUtil]
-    CU --> SSE[SseHub]
-    SSE --> C[客户端]
-    C -->|Last-Event-ID| SSE
-    SSE --> CU
-    CU -->|获取| RZ[(Redis ZSet)]
-    RZ -->|返回| CU
-    RZ -->|未命中| DB[(MySQL)]
-    DB -->|回填| RZ
-```
-
-### 双 Bucket 存储
-
-```mermaid
-flowchart TB
-    subgraph Private[Private Bucket]
-        Draft[posts/id/versions/ts.md]
-        Versions[版本历史]
-    end
-
-    subgraph Public[Public Bucket]
-        Published[posts/id/content.md]
-        Cover[posts/id/cover.webp]
-        Images[posts/id/images/uuid]
-    end
-
-    User[用户] -->|预签名直传| Draft
-    Draft -->|保存版本| Versions
-    Versions -->|回滚| Draft
-    Draft -->|审核通过复制| Published
-    User -->|预签名直传| Images
-    Images -->|选为封面复制| Cover
-    Published -->|下线删除| Delete1[删除]
-    Cover -->|下线删除| Delete2[删除]
 ```
 
 ### 内容审核状态机
@@ -194,46 +137,93 @@ stateDiagram-v2
     DRAFT --> REVIEWING: 发布请求
     REVIEWING --> PUBLISHED: 审核通过
     REVIEWING --> DRAFT: 审核拒绝（无已发布版本）
-    REVIEWING --> PUBLISHED: 审核拒绝（已有发布版本）
+    REVIEWING --> PUBLISHED: 审核拒绝（已有发布版本，保留旧版）
     PUBLISHED --> DRAFT: 下线
     DRAFT --> DELETED: 删除
     PUBLISHED --> DELETED: 删除
 ```
 
+### 双 Bucket 对象存储
+
+```mermaid
+flowchart TB
+    subgraph Private[Private Bucket]
+        Draft[posts/id/versions/ts.md]
+        Versions[版本历史]
+    end
+    subgraph Public[Public Bucket]
+        Published[posts/id/content.md]
+        Cover[posts/id/cover.webp]
+        Images[posts/id/images/uuid]
+    end
+
+    User -->|预签名直传| Draft
+    Draft -->|保存版本| Versions
+    Versions -->|回滚| Draft
+    Draft -->|审核通过复制| Published
+    User -->|预签名直传| Images
+    Images -->|选为封面复制| Cover
+    Published -->|下线删除| X1[ ]
+    Cover -->|下线删除| X2[ ]
+```
+
+---
+
 ## 项目结构
 
 ```
-src/main/java/dev/haotangyuan/knownote/
-├── common/                     # 通用组件
-│   ├── async/                  # @QueuedAsync 异步任务队列
-│   ├── sse/                    # SSE 实时推送
-│   └── util/                   # 缓存、事件发布、序列号等工具
-├── config/                     # 配置类（JWT、OSS、RocketMQ、LLM、OpenAPI）
-├── user/                       # 用户模块
-│   ├── api/                    # Controller + DTO
-│   ├── domain/                 # Entity + Mapper
-│   └── service/                # 认证、Token、Google OAuth、验证码
-├── research/                   # 深度研究模块
-│   ├── agent/                  # Scope / Supervisor / Researcher / Search / Report
-│   ├── tool/                   # 工具注册中心（@ResearcherTool / @SupervisorTool）
-│   ├── workflow/               # AgentPipeline 流水线
-│   ├── state/                  # DeepResearchState
-│   ├── prompt/                 # Prompt 模板
-│   ├── schema/                 # LLM 结构化输出 Schema
-│   └── client/                 # Tavily 搜索客户端
-├── post/                       # 文章模块
-│   ├── api/                    # Controller + DTO
-│   ├── domain/                 # Entity + Mapper + Enum
-│   ├── service/                # 文章 CRUD、版本管理
-│   └── mq/                     # 审核消息（Producer / Consumer / DLQ / Reviewer）
-├── storage/                    # 存储模块（MinIO S3 预签名上传）
-├── like/                       # 点赞模块（MQ 异步聚合）
-└── count/                      # 计数模块（MQ 消费计数变更）
+KnowNote/
+├── src/main/java/dev/haotangyuan/knownote/   # Spring Boot 后端
+│   ├── common/          # 通用组件（异步队列、SseHub、工具类、@QueuedAsync AOP）
+│   ├── config/          # 配置（JWT、MinIO、RocketMQ、LLM、OpenAPI、JwtFilter）
+│   ├── user/            # 用户模块（注册/登录、Token、Google OAuth）
+│   ├── research/        # 深度研究模块
+│   │   ├── agent/       # ScopeAgent / SupervisorAgent / ResearcherAgent / ReportAgent
+│   │   ├── tool/        # LangChain4j Tool 注册（@ResearcherTool / @SupervisorTool）
+│   │   ├── workflow/    # AgentPipeline 流水线编排
+│   │   └── client/      # Tavily REST 客户端
+│   ├── post/            # 文章模块（CRUD、版本历史、审核 MQ 消费）
+│   ├── studio/          # Studio AI 代码生成
+│   │   ├── api/         # StudioProjectController + DTO
+│   │   ├── agent/       # CodeGenAgent（LangChain4j 流式）
+│   │   ├── pipeline/    # CodeGenPipeline（Architect → Coder 两阶段）
+│   │   ├── config/      # StudioModelConfig（LLM Bean）
+│   │   ├── domain/      # StudioProjectDO + Mapper
+│   │   ├── service/     # StudioProjectService
+│   │   └── sse/         # StudioSseHub
+│   ├── storage/         # MinIO 预签名上传
+│   ├── like/            # 点赞（MQ 异步聚合）
+│   └── count/           # 计数消费
+├── studio-service/      # Node.js 沙盒管理服务（Fastify :3001）
+│   └── src/
+│       ├── ContainerManager.ts   # Docker 生命周期
+│       ├── FileService.ts        # 工作区文件读写
+│       └── routes/               # containers / files / preview / ws
+├── studio-frontend/     # React 前端（Vite :5173）
+│   └── src/
+│       ├── components/  # ChatPanel / EditorPanel / PreviewPanel
+│       ├── hooks/       # useSseStream / useContainerWs
+│       └── store/       # Zustand 全局状态
+└── sandbox-image/       # 沙盒 Docker 镜像（Node.js 20 + Vite）
+    ├── Dockerfile
+    └── workspace-template/   # React + Vite 初始模板
 ```
+
+---
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [DEVELOPMENT.md](./DEVELOPMENT.md) | 本地开发环境搭建、服务启动、环境变量配置 |
+| [studio-service/README.md](./studio-service/README.md) | studio-service API 参考文档 |
+| `http://localhost:8080/docs` | 在线 API 文档（Scalar UI，服务启动后访问） |
+
+---
 
 ## 快速开始
 
-### 1. 环境要求
+### 1. 前置依赖
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|

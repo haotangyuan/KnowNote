@@ -5,6 +5,10 @@ import cn.hutool.core.util.StrUtil;
 import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.research.data.EventType;
 import dev.haotangyuan.knownote.research.data.WorkflowStatus;
+import dev.haotangyuan.knownote.research.framework.Agent;
+import dev.haotangyuan.knownote.research.framework.AgentContext;
+import dev.haotangyuan.knownote.research.framework.Msg;
+import dev.haotangyuan.knownote.research.framework.ServiceResponse;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.langchain4j.data.message.UserMessage;
@@ -26,7 +30,7 @@ import static dev.haotangyuan.knownote.research.prompt.ReportPrompts.REPORT_AGEN
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class ReportAgent {
+public class ReportAgent implements Agent {
     private final ModelHandler modelHandler;
     private final EventPublisher eventPublisher;
 
@@ -50,7 +54,7 @@ public class ReportAgent {
         return state.getReport();
     }
 
-    public void action(AgentAbility agent, DeepResearchState state) {
+    private void action(AgentAbility agent, DeepResearchState state) {
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(agent.getMemory().messages())
                 .build();
@@ -63,5 +67,23 @@ public class ReportAgent {
         eventPublisher.publishEvent(state.getResearchId(), EventType.REPORT,
                 "研究报告已完成", null);
         eventPublisher.publishMessage(state.getResearchId(), "assistant", chatResponse.aiMessage().text());
+    }
+
+    // ── Agent interface ─────────────────────────────────────────────────────
+
+    @Override
+    public String name() {
+        return "report-agent";
+    }
+
+    @Override
+    public Msg reply(Msg input, AgentContext ctx) {
+        DeepResearchState state = input.contentAs(DeepResearchState.class);
+        run(state);
+        String status = state.getStatus();
+        if (!WorkflowStatus.IN_REPORT.equals(status)) {
+            return Msg.of("assistant", name(), ServiceResponse.error(status));
+        }
+        return Msg.of("assistant", name(), state);
     }
 }

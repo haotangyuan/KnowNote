@@ -7,6 +7,10 @@ import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.research.data.EventType;
 import dev.haotangyuan.knownote.research.data.WorkflowStatus;
 import dev.haotangyuan.knownote.research.exception.WorkflowException;
+import dev.haotangyuan.knownote.research.framework.Agent;
+import dev.haotangyuan.knownote.research.framework.AgentContext;
+import dev.haotangyuan.knownote.research.framework.Msg;
+import dev.haotangyuan.knownote.research.framework.ServiceResponse;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.haotangyuan.knownote.research.tool.ToolRegistry;
@@ -37,7 +41,7 @@ import static dev.haotangyuan.knownote.research.prompt.SupervisorPrompts.LEAD_RE
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class SupervisorAgent {
+public class SupervisorAgent implements Agent {
     private final ModelHandler modelHandler;
     private final ObjectMapper objectMapper;
     private final ToolRegistry toolRegistry;
@@ -71,8 +75,9 @@ public class SupervisorAgent {
     private void plan(AgentAbility agent, DeepResearchState state) {
         int maxConductCount = state.getBudget().getMaxConductCount();
         int maxIterations = maxConductCount * 2;
-        while (state.getConductCount() < maxConductCount
-                && state.getSupervisorIterations() < maxIterations) {
+        int conductCount = 0;
+        int supervisorIterations = 0;
+        while (conductCount < maxConductCount && supervisorIterations < maxIterations) {
             List<ToolSpecification> toolSpecifications = toolRegistry.getToolSpecifications(SUPERVISOR_STAGE);
             ChatRequest chatRequest = ChatRequest.builder()
                     .toolSpecifications(toolSpecifications)
@@ -88,33 +93,38 @@ public class SupervisorAgent {
             List<ToolExecutionRequest> toolExecutionRequests = chatResponse.aiMessage().toolExecutionRequests();
             if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
                 agent.getMemory().add(UserMessage.from(TOOL_REMINDER));
-                state.setSupervisorIterations(state.getSupervisorIterations() + 1);
+                supervisorIterations++;
                 continue;
             }
 
-            action(agent, toolExecutionRequests, state);
+            conductCount = action(agent, toolExecutionRequests, state, conductCount, maxConductCount);
+
+            // P5 fix: hard-exit when conduct quota is exhausted
+            if (conductCount >= maxConductCount) {
+                log.info("Conduct quota exhausted ({}/{}), exiting supervisor loop for researchId={}",
+                        conductCount, maxConductCount, state.getResearchId());
+                break;
+            }
 
             if (toolExecutionRequests.stream()
                     .anyMatch(toolRequest -> "researchComplete".equals(toolRequest.name()))) {
                 break;
             }
 
-            state.setSupervisorIterations(state.getSupervisorIterations() + 1);
+            supervisorIterations++;
         }
     }
 
-    private void action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests, DeepResearchState state) {
-        if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
-            return;
-        }
+    /** Returns the updated conductCount. */
+    private int action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests,
+                       DeepResearchState state, int conductCount, int maxConductCount) {
         for (ToolExecutionRequest toolExecutionRequest : toolExecutionRequests) {
             String result;
 
             if ("conductResearch".equals(toolExecutionRequest.name())) {
-                int maxConductCount = state.getBudget().getMaxConductCount();
-                if (state.getConductCount() >= maxConductCount) {
+                if (conductCount >= maxConductCount) {
                     log.warn("conductResearch count limit reached: {}/{}",
-                            state.getConductCount(), maxConductCount);
+                            conductCount, maxConductCount);
                     result = "已达到研究任务配额限制，请调用 researchComplete 完成研究";
                     agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
                     continue;
@@ -123,31 +133,43 @@ public class SupervisorAgent {
                 String researchTopic;
                 try {
                     var argsNode = objectMapper.readTree(toolExecutionRequest.arguments());
-                    researchTopic = argsNode.get("researchTopic").asText();
+                    researchTopic = (argsNode != null && argsNode.has("researchTopic")) ? argsNode.get("researchTopic").asText() : null;
                 } catch (Exception e) {
-                    log.error("Failed to parse conductResearch arguments", e);
-                    throw new WorkflowException("Failed to parse conductResearch arguments", e);
+                    log.error("Failed to parse conductResearch arguments for researchId={}", state.getResearchId(), e);
+                    String errResult = "工具参数解析失败，请重新调用并提供正确的JSON格式";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, errResult));
+                    continue;
+                }
+                if (researchTopic == null || researchTopic.isBlank()) {
+                    String errResult = "缺少必填参数 researchTopic，请重新调用并提供研究主题";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, errResult));
+                    continue;
                 }
 
                 Long planEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.SUPERVISOR,
                         "正在研究: " + researchTopic, null, state.getCurrentSupervisorEventId());
-                state.setCurrentResearchEventId(planEventId);
 
-                state.setResearchTopic(researchTopic);
-                state.setResearcherIterations(0);
-                state.setSearchCount(0);
-                state.setResearcherNotes(new ArrayList<>());
-
-                result = researcherAgent.run(state);
-
-                state.setConductCount(state.getConductCount() + 1);
+                try {
+                    result = researcherAgent.run(state, researchTopic, planEventId);
+                    conductCount++;
+                } catch (Exception e) {
+                    log.error("conductResearch execution failed for researchId={}, topic={}",
+                            state.getResearchId(), researchTopic, e);
+                    result = "研究子任务执行失败，请继续处理其他主题或调用 researchComplete 完成研究";
+                }
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {
                     log.warn("No executor found for tool {} in stage {}", toolExecutionRequest.name(), SUPERVISOR_STAGE);
                     continue;
                 }
-                result = executor.execute(toolExecutionRequest, null);
+                try {
+                    result = executor.execute(toolExecutionRequest, null);
+                } catch (Exception e) {
+                    log.warn("Tool execution failed for tool={} researchId={}",
+                            toolExecutionRequest.name(), state.getResearchId(), e);
+                    result = "工具执行失败，请重试";
+                }
             }
 
             if (toolExecutionRequest.name().equals("thinkTool")) {
@@ -160,5 +182,24 @@ public class SupervisorAgent {
 
             agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
         }
+        return conductCount;
+    }
+
+    // ── Agent interface ─────────────────────────────────────────────────────
+
+    @Override
+    public String name() {
+        return "supervisor-agent";
+    }
+
+    @Override
+    public Msg reply(Msg input, AgentContext ctx) {
+        DeepResearchState state = input.contentAs(DeepResearchState.class);
+        run(state);
+        String status = state.getStatus();
+        if (!WorkflowStatus.IN_RESEARCH.equals(status)) {
+            return Msg.of("assistant", name(), ServiceResponse.error(status));
+        }
+        return Msg.of("assistant", name(), state);
     }
 }

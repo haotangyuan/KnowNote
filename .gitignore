@@ -35,7 +35,23 @@ build/
 .env
 *.log
 
-### Development ###
+### Worktrees ###
+.worktrees/
+
+### Development / AI tools ###
 CLAUDE.md
 AGENTS.md
 **/.DS_Store
+.superpowers/
+.claude/
+docs/superpowers/
+*_ASSESSMENT.md
+*_CONTEXT.md
+CONTEXT_*.md
+FILE_INVENTORY.md
+QUICK_REFERENCE.md
+README_CONTEXT.md
+README_ASSESSMENT.md
+EXECUTIVE_SUMMARY.md
+NEXT_STEPS.md
+PROJECT_STATUS.md
