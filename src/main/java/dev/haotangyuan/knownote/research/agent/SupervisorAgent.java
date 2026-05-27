@@ -10,6 +10,7 @@ import dev.haotangyuan.knownote.research.exception.WorkflowException;
 import dev.haotangyuan.knownote.research.framework.Agent;
 import dev.haotangyuan.knownote.research.framework.AgentContext;
 import dev.haotangyuan.knownote.research.framework.Msg;
+import dev.haotangyuan.knownote.research.framework.ServiceResponse;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.haotangyuan.knownote.research.tool.ToolRegistry;
@@ -187,6 +188,10 @@ public class SupervisorAgent implements Agent {
     public Msg reply(Msg input, AgentContext ctx) {
         DeepResearchState state = input.contentAs(DeepResearchState.class);
         run(state);
-        return Msg.of("assistant", name(), state.getSupervisorNotes());
+        String status = state.getStatus();
+        if (!WorkflowStatus.IN_RESEARCH.equals(status)) {
+            return Msg.of("assistant", name(), ServiceResponse.error(status));
+        }
+        return Msg.of("assistant", name(), state);
     }
 }

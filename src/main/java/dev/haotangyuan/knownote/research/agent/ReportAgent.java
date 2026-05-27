@@ -8,6 +8,7 @@ import dev.haotangyuan.knownote.research.data.WorkflowStatus;
 import dev.haotangyuan.knownote.research.framework.Agent;
 import dev.haotangyuan.knownote.research.framework.AgentContext;
 import dev.haotangyuan.knownote.research.framework.Msg;
+import dev.haotangyuan.knownote.research.framework.ServiceResponse;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.langchain4j.data.message.UserMessage;
@@ -79,6 +80,10 @@ public class ReportAgent implements Agent {
     public Msg reply(Msg input, AgentContext ctx) {
         DeepResearchState state = input.contentAs(DeepResearchState.class);
         run(state);
-        return Msg.of("assistant", name(), state.getReport());
+        String status = state.getStatus();
+        if (!WorkflowStatus.IN_REPORT.equals(status)) {
+            return Msg.of("assistant", name(), ServiceResponse.error(status));
+        }
+        return Msg.of("assistant", name(), state);
     }
 }
