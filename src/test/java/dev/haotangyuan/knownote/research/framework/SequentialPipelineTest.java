@@ -73,4 +73,30 @@ class SequentialPipelineTest {
 
         assertThat(callCount.get()).isEqualTo(1);
     }
+
+    @Test
+    void stopsOnQuotaExceededStatus() {
+        AtomicInteger callCount = new AtomicInteger(0);
+
+        Agent quotaAgent = new Agent() {
+            public String name() { return "Quota"; }
+            public Msg reply(Msg input, AgentContext ctx) {
+                callCount.incrementAndGet();
+                return Msg.of("assistant", "Quota", ServiceResponse.quotaExceeded("quota hit"));
+            }
+        };
+
+        Agent shouldNotRun = new Agent() {
+            public String name() { return "ShouldNotRun"; }
+            public Msg reply(Msg input, AgentContext ctx) {
+                callCount.incrementAndGet();
+                return Msg.of("assistant", "ShouldNotRun", "ok");
+            }
+        };
+
+        SequentialPipeline pipeline = new SequentialPipeline(List.of(quotaAgent, shouldNotRun));
+        pipeline.run(Msg.of("user", "u", "go"), testCtx());
+
+        assertThat(callCount.get()).isEqualTo(1);
+    }
 }

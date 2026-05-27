@@ -7,6 +7,12 @@ import java.util.function.BiPredicate;
 /**
  * Runs a single agent repeatedly up to maxIterations times,
  * stopping early if the stop condition is met.
+ *
+ * <p>Designed for simple retry/polling loops. The current research agents
+ * ({@code SupervisorAgent}, {@code ResearcherAgent}) use hand-rolled loops
+ * because they interleave tool-execution state; those loops are candidates
+ * for migration to this pipeline in a future refactoring once tool dispatch
+ * is extracted as a first-class abstraction.
  */
 @Slf4j
 public class ForLoopPipeline implements Pipeline {

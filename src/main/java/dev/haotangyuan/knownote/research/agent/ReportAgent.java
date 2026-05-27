@@ -54,7 +54,7 @@ public class ReportAgent implements Agent {
         return state.getReport();
     }
 
-    public void action(AgentAbility agent, DeepResearchState state) {
+    private void action(AgentAbility agent, DeepResearchState state) {
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(agent.getMemory().messages())
                 .build();

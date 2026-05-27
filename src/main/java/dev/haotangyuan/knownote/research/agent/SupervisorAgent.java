@@ -118,9 +118,6 @@ public class SupervisorAgent implements Agent {
     /** Returns the updated conductCount. */
     private int action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests,
                        DeepResearchState state, int conductCount, int maxConductCount) {
-        if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
-            return conductCount;
-        }
         for (ToolExecutionRequest toolExecutionRequest : toolExecutionRequests) {
             String result;
 
@@ -152,16 +149,27 @@ public class SupervisorAgent implements Agent {
                 Long planEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.SUPERVISOR,
                         "正在研究: " + researchTopic, null, state.getCurrentSupervisorEventId());
 
-                result = researcherAgent.run(state, researchTopic, planEventId);
-
-                conductCount++;
+                try {
+                    result = researcherAgent.run(state, researchTopic, planEventId);
+                    conductCount++;
+                } catch (Exception e) {
+                    log.error("conductResearch execution failed for researchId={}, topic={}",
+                            state.getResearchId(), researchTopic, e);
+                    result = "研究子任务执行失败，请继续处理其他主题或调用 researchComplete 完成研究";
+                }
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {
                     log.warn("No executor found for tool {} in stage {}", toolExecutionRequest.name(), SUPERVISOR_STAGE);
                     continue;
                 }
-                result = executor.execute(toolExecutionRequest, null);
+                try {
+                    result = executor.execute(toolExecutionRequest, null);
+                } catch (Exception e) {
+                    log.warn("Tool execution failed for tool={} researchId={}",
+                            toolExecutionRequest.name(), state.getResearchId(), e);
+                    result = "工具执行失败，请重试";
+                }
             }
 
             if (toolExecutionRequest.name().equals("thinkTool")) {

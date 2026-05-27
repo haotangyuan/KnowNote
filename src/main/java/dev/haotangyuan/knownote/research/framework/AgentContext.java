@@ -5,11 +5,12 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
- * Session-scoped, thread-safe context passed through all agents in a pipeline run.
+ * Session-scoped context passed through all agents in a pipeline run.
+ * Carries the immutable identifiers needed to route events and enforce budget limits.
+ * Per-agent counters (conductCount, searchCount) and token totals are tracked as
+ * local variables inside each agent; persistent totals live in DeepResearchState
+ * (they are written to the DB on completion).
  */
 @Getter
 @Builder
@@ -18,32 +19,4 @@ public class AgentContext {
     @NonNull
     private final String researchId;
     private final ResearchProperties.BudgetLevel budget;
-
-    @Builder.Default
-    private final AtomicInteger conductCount = new AtomicInteger(0);
-
-    @Builder.Default
-    private final AtomicInteger searchCount = new AtomicInteger(0);
-
-    @Builder.Default
-    private final AtomicLong totalInputTokens = new AtomicLong(0L);
-
-    @Builder.Default
-    private final AtomicLong totalOutputTokens = new AtomicLong(0L);
-
-    public void addInputTokens(long count) {
-        totalInputTokens.addAndGet(count);
-    }
-
-    public void addOutputTokens(long count) {
-        totalOutputTokens.addAndGet(count);
-    }
-
-    public int incrementConductCount() {
-        return conductCount.incrementAndGet();
-    }
-
-    public int incrementSearchCount() {
-        return searchCount.incrementAndGet();
-    }
 }

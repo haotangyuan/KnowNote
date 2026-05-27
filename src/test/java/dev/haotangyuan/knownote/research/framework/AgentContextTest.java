@@ -4,6 +4,7 @@ import dev.haotangyuan.knownote.config.ResearchProperties;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentContextTest {
 
@@ -16,46 +17,19 @@ class AgentContextTest {
     }
 
     @Test
-    void builder_defaultCountersAreZero() {
+    void builder_storesResearchIdAndBudget() {
+        ResearchProperties.BudgetLevel budget = highBudget();
         AgentContext ctx = AgentContext.builder()
-                .researchId("r1")
-                .budget(highBudget())
+                .researchId("r42")
+                .budget(budget)
                 .build();
-        assertThat(ctx.getConductCount().get()).isZero();
-        assertThat(ctx.getSearchCount().get()).isZero();
-        assertThat(ctx.getTotalInputTokens().get()).isZero();
-        assertThat(ctx.getTotalOutputTokens().get()).isZero();
+        assertThat(ctx.getResearchId()).isEqualTo("r42");
+        assertThat(ctx.getBudget()).isSameAs(budget);
     }
 
     @Test
-    void addInputTokens_accumulatesCorrectly() {
-        AgentContext ctx = AgentContext.builder()
-                .researchId("r1")
-                .budget(highBudget())
-                .build();
-        ctx.addInputTokens(100L);
-        ctx.addInputTokens(50L);
-        assertThat(ctx.getTotalInputTokens().get()).isEqualTo(150L);
-    }
-
-    @Test
-    void addOutputTokens_accumulatesCorrectly() {
-        AgentContext ctx = AgentContext.builder()
-                .researchId("r1")
-                .budget(highBudget())
-                .build();
-        ctx.addOutputTokens(200L);
-        assertThat(ctx.getTotalOutputTokens().get()).isEqualTo(200L);
-    }
-
-    @Test
-    void conductCount_isIncrementable() {
-        AgentContext ctx = AgentContext.builder()
-                .researchId("r1")
-                .budget(highBudget())
-                .build();
-        ctx.getConductCount().incrementAndGet();
-        ctx.getConductCount().incrementAndGet();
-        assertThat(ctx.getConductCount().get()).isEqualTo(2);
+    void builder_requiresResearchId() {
+        assertThatThrownBy(() -> AgentContext.builder().budget(highBudget()).build())
+                .isInstanceOf(NullPointerException.class);
     }
 }

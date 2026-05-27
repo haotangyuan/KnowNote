@@ -37,7 +37,7 @@ public class SequentialPipeline implements Pipeline {
             return false;
         }
         if (msg.content() instanceof ServiceResponse<?> sr) {
-            return sr.isError();
+            return sr.isError() || sr.isQuotaExceeded();
         }
         return false;
     }
