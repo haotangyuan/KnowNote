@@ -20,7 +20,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static dev.haotangyuan.knownote.research.prompt.SearchPrompts.SUMMARIZE_WEBPAGE_PROMPT;
@@ -48,13 +50,17 @@ public class SearchAgent {
                 .streamingChatModel(modelHandler.getStreamModel(state.getResearchId()))
                 .build();
 
-        plan(query, maxResults, topic, searchEventId, state);
-        action(agent, state);
-        return summarize(query, searchEventId, agent, state);
+        Map<String, TavilyClient.SearchResult> searchResults = new HashMap<>();
+        List<String> searchNotes = new ArrayList<>();
+
+        plan(query, maxResults, topic, searchEventId, state, searchResults);
+        action(agent, state, searchResults, searchNotes);
+        return summarize(query, searchEventId, agent, state, searchNotes);
     }
 
     private void plan(String query, int maxResults, String topic,
-                      Long searchEventId, DeepResearchState state) {
+                      Long searchEventId, DeepResearchState state,
+                      Map<String, TavilyClient.SearchResult> searchResults) {
         TavilyClient.TavilyResponse response = tavilyClient.search(
             query,
             maxResults,
@@ -67,25 +73,25 @@ public class SearchAgent {
             return;
         }
 
-        Map<String, TavilyClient.SearchResult> uniqueResults = new HashMap<>();
         for (TavilyClient.SearchResult result : response.results()) {
-            if (result.url() != null && !uniqueResults.containsKey(result.url())) {
-                uniqueResults.put(result.url(), result);
+            if (result.url() != null && !searchResults.containsKey(result.url())) {
+                searchResults.put(result.url(), result);
             }
         }
 
-        state.setSearchResults(uniqueResults);
         eventPublisher.publishEvent(state.getResearchId(), EventType.SEARCH,
-                "找到 " + uniqueResults.size() + " 个相关结果", null, searchEventId);
+                "找到 " + searchResults.size() + " 个相关结果", null, searchEventId);
     }
 
-    private void action(AgentAbility agent, DeepResearchState state) {
-        if (state.getSearchResults() == null || state.getSearchResults().isEmpty()) {
+    private void action(AgentAbility agent, DeepResearchState state,
+                        Map<String, TavilyClient.SearchResult> searchResults,
+                        List<String> searchNotes) {
+        if (searchResults.isEmpty()) {
             log.warn("No search results to process");
             return;
         }
 
-        for (TavilyClient.SearchResult result : state.getSearchResults().values()) {
+        for (TavilyClient.SearchResult result : searchResults.values()) {
             String content = result.rawContent() != null && !result.rawContent().isEmpty()
                 ? result.rawContent()
                 : result.content();
@@ -102,10 +108,10 @@ public class SearchAgent {
                             "key_excerpts", summary.getKeyExcerpts()
                         )
                     );
-                    state.getSearchNotes().add(formatted);
+                    searchNotes.add(formatted);
                 } catch (Exception e) {
                     log.warn("Failed to summarize {}: {}", result.url(), e.getMessage(), e);
-                    state.getSearchNotes().add(StrUtil.format("[{title}]\nURL: {url}\n{content}",
+                    searchNotes.add(StrUtil.format("[{title}]\nURL: {url}\n{content}",
                         Map.of(
                             "title", result.title(),
                             "url", result.url(),
@@ -113,7 +119,7 @@ public class SearchAgent {
                         )));
                 }
             } else {
-                state.getSearchNotes().add(StrUtil.format("[{title}]\nURL: {url}\n{content}",
+                searchNotes.add(StrUtil.format("[{title}]\nURL: {url}\n{content}",
                     Map.of(
                         "title", result.title(),
                         "url", result.url(),
@@ -154,8 +160,9 @@ public class SearchAgent {
         }
     }
 
-    private String summarize(String query, Long searchEventId, AgentAbility agent, DeepResearchState state) {
-        if (state.getSearchNotes() == null || state.getSearchNotes().isEmpty()) {
+    private String summarize(String query, Long searchEventId, AgentAbility agent,
+                              DeepResearchState state, List<String> searchNotes) {
+        if (searchNotes.isEmpty()) {
             return "No search results found for: " + query;
         }
         eventPublisher.publishEvent(state.getResearchId(), EventType.SEARCH,
@@ -166,7 +173,7 @@ public class SearchAgent {
                 Map.of("query", query)));
 
         int num = 1;
-        for (String result : state.getSearchNotes()) {
+        for (String result : searchNotes) {
             output.append(StrUtil.format("\n--- SOURCE {index} ---\n",
                     Map.of("index", num++)));
             output.append(result);

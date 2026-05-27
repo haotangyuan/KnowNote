@@ -31,7 +31,6 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -244,14 +243,7 @@ public class ResearchServiceImpl implements ResearchService {
                 .chatHistory(chatHistory)
                 .status(WorkflowStatus.QUEUE)
                 .budget(budgetLevel)
-                .supervisorIterations(0)
-                .conductCount(0)
                 .supervisorNotes(new ArrayList<>())
-                .researcherIterations(0)
-                .searchCount(0)
-                .researcherNotes(new ArrayList<>())
-                .searchResults(new HashMap<>())
-                .searchNotes(new ArrayList<>())
                 .totalInputTokens(0L)
                 .totalOutputTokens(0L)
                 .build();

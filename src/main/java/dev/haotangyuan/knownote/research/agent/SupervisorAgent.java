@@ -71,8 +71,9 @@ public class SupervisorAgent {
     private void plan(AgentAbility agent, DeepResearchState state) {
         int maxConductCount = state.getBudget().getMaxConductCount();
         int maxIterations = maxConductCount * 2;
-        while (state.getConductCount() < maxConductCount
-                && state.getSupervisorIterations() < maxIterations) {
+        int conductCount = 0;
+        int supervisorIterations = 0;
+        while (conductCount < maxConductCount && supervisorIterations < maxIterations) {
             List<ToolSpecification> toolSpecifications = toolRegistry.getToolSpecifications(SUPERVISOR_STAGE);
             ChatRequest chatRequest = ChatRequest.builder()
                     .toolSpecifications(toolSpecifications)
@@ -88,16 +89,16 @@ public class SupervisorAgent {
             List<ToolExecutionRequest> toolExecutionRequests = chatResponse.aiMessage().toolExecutionRequests();
             if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
                 agent.getMemory().add(UserMessage.from(TOOL_REMINDER));
-                state.setSupervisorIterations(state.getSupervisorIterations() + 1);
+                supervisorIterations++;
                 continue;
             }
 
-            action(agent, toolExecutionRequests, state);
+            conductCount = action(agent, toolExecutionRequests, state, conductCount, maxConductCount);
 
             // P5 fix: hard-exit when conduct quota is exhausted
-            if (state.getConductCount() >= maxConductCount) {
+            if (conductCount >= maxConductCount) {
                 log.info("Conduct quota exhausted ({}/{}), exiting supervisor loop for researchId={}",
-                        state.getConductCount(), maxConductCount, state.getResearchId());
+                        conductCount, maxConductCount, state.getResearchId());
                 break;
             }
 
@@ -106,22 +107,23 @@ public class SupervisorAgent {
                 break;
             }
 
-            state.setSupervisorIterations(state.getSupervisorIterations() + 1);
+            supervisorIterations++;
         }
     }
 
-    private void action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests, DeepResearchState state) {
+    /** Returns the updated conductCount. */
+    private int action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests,
+                       DeepResearchState state, int conductCount, int maxConductCount) {
         if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
-            return;
+            return conductCount;
         }
         for (ToolExecutionRequest toolExecutionRequest : toolExecutionRequests) {
             String result;
 
             if ("conductResearch".equals(toolExecutionRequest.name())) {
-                int maxConductCount = state.getBudget().getMaxConductCount();
-                if (state.getConductCount() >= maxConductCount) {
+                if (conductCount >= maxConductCount) {
                     log.warn("conductResearch count limit reached: {}/{}",
-                            state.getConductCount(), maxConductCount);
+                            conductCount, maxConductCount);
                     result = "已达到研究任务配额限制，请调用 researchComplete 完成研究";
                     agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
                     continue;
@@ -145,16 +147,10 @@ public class SupervisorAgent {
 
                 Long planEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.SUPERVISOR,
                         "正在研究: " + researchTopic, null, state.getCurrentSupervisorEventId());
-                state.setCurrentResearchEventId(planEventId);
 
-                state.setResearchTopic(researchTopic);
-                state.setResearcherIterations(0);
-                state.setSearchCount(0);
-                state.setResearcherNotes(new ArrayList<>());
+                result = researcherAgent.run(state, researchTopic, planEventId);
 
-                result = researcherAgent.run(state);
-
-                state.setConductCount(state.getConductCount() + 1);
+                conductCount++;
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {
@@ -174,5 +170,6 @@ public class SupervisorAgent {
 
             agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
         }
+        return conductCount;
     }
 }

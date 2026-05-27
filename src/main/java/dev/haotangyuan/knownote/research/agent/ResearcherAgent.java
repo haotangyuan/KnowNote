@@ -25,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,11 +69,10 @@ public class ResearcherAgent {
 
     record SearchArgs(String query, int maxResults, String topic) {}
 
-    public String run(DeepResearchState state) {
-        log.info("ResearcherAgent run: researchId='{}', topic='{}'", state.getResearchId(), state.getResearchTopic());
+    public String run(DeepResearchState state, String researchTopic, Long parentEventId) {
+        log.info("ResearcherAgent run: researchId='{}', topic='{}'", state.getResearchId(), researchTopic);
         Long researchEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.RESEARCH,
-                "深入研究: " + state.getResearchTopic(), null, state.getCurrentResearchEventId());
-        state.setCurrentResearchEventId(researchEventId);
+                "深入研究: " + researchTopic, null, parentEventId);
 
         AgentAbility agent = AgentAbility.builder()
                 .memory(MessageWindowChatMemory.withMaxMessages(100))
@@ -86,17 +84,19 @@ public class ResearcherAgent {
             StrUtil.format(RESEARCH_AGENT_PROMPT, Map.of("date", DateUtil.today()))
         );
         agent.getMemory().add(systemMessage);
-        agent.getMemory().add(UserMessage.from(state.getResearchTopic()));
+        agent.getMemory().add(UserMessage.from(researchTopic));
 
-        plan(agent, state);
-        return compressResearch(agent, state);
+        plan(agent, state, researchTopic, researchEventId);
+        return compressResearch(agent, state, researchTopic, researchEventId);
     }
 
-    private void plan(AgentAbility agent, DeepResearchState state) {
+    private void plan(AgentAbility agent, DeepResearchState state,
+                      String researchTopic, Long researchEventId) {
         int maxSearchCount = state.getBudget().getMaxSearchCount();
         int maxIterations = maxSearchCount * 2;
-        while (state.getSearchCount() < maxSearchCount
-                && state.getResearcherIterations() < maxIterations) {
+        int searchCount = 0;
+        int researcherIterations = 0;
+        while (searchCount < maxSearchCount && researcherIterations < maxIterations) {
             List<ToolSpecification> toolSpecifications = toolRegistry.getToolSpecifications(RESEARCHER_STAGE);
             ChatRequest chatRequest = ChatRequest.builder()
                     .messages(agent.getMemory().messages())
@@ -109,29 +109,32 @@ public class ResearcherAgent {
             state.setTotalOutputTokens(state.getTotalOutputTokens() + tokenUsage.outputTokenCount());
             agent.getMemory().add(chatResponse.aiMessage());
 
-            action(agent, chatResponse.aiMessage().toolExecutionRequests(), state);
+            searchCount = action(agent, chatResponse.aiMessage().toolExecutionRequests(), state,
+                    searchCount, maxSearchCount, researchEventId);
 
             if (!chatResponse.aiMessage().hasToolExecutionRequests()) {
                 break;
             }
 
-            state.setResearcherIterations(state.getResearcherIterations() + 1);
+            researcherIterations++;
         }
     }
 
-    private void action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests, DeepResearchState state) {
+    /** Returns the updated searchCount. */
+    private int action(AgentAbility agent, List<ToolExecutionRequest> toolExecutionRequests,
+                       DeepResearchState state, int searchCount, int maxSearchCount,
+                       Long researchEventId) {
         if (toolExecutionRequests == null || toolExecutionRequests.isEmpty()) {
-            return;
+            return searchCount;
         }
 
         for (ToolExecutionRequest toolExecutionRequest : toolExecutionRequests) {
             String result = "";
 
             if (TOOL_TAVILY_SEARCH.equals(toolExecutionRequest.name())) {
-                int maxSearchCount = state.getBudget().getMaxSearchCount();
-                if (state.getSearchCount() >= maxSearchCount) {
+                if (searchCount >= maxSearchCount) {
                     log.warn("tavilySearch count limit reached: {}/{}",
-                            state.getSearchCount(), maxSearchCount);
+                            searchCount, maxSearchCount);
                     result = "已达到搜索配额限制，请根据已有信息完成研究";
                     agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
                     continue;
@@ -145,13 +148,9 @@ public class ResearcherAgent {
                     continue;
                 }
 
-                state.setSearchResults(new HashMap<>());
-                state.setSearchNotes(new ArrayList<>());
-
                 result = searchAgent.run(args.query(), args.maxResults(), args.topic(),
-                        state.getCurrentResearchEventId(), state);
-
-                state.setSearchCount(state.getSearchCount() + 1);
+                        researchEventId, state);
+                searchCount++;
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {
@@ -165,22 +164,23 @@ public class ResearcherAgent {
 
             if (TOOL_THINK.equals(toolExecutionRequest.name())) {
                 eventPublisher.publishEvent(state.getResearchId(), EventType.RESEARCH,
-                        "分析中...", result, state.getCurrentResearchEventId());
+                        "分析中...", result, researchEventId);
             }
-            state.getResearcherNotes().add(String.format("[%s] %s", toolExecutionRequest.name(), result));
 
             agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
         }
+        return searchCount;
     }
 
-    private String compressResearch(AgentAbility agent, DeepResearchState state) {
+    private String compressResearch(AgentAbility agent, DeepResearchState state,
+                                    String researchTopic, Long researchEventId) {
         String systemPrompt = StrUtil.format(COMPRESS_RESEARCH_SYSTEM_PROMPT, Map.of("date", DateUtil.today()));
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(SystemMessage.from(systemPrompt));
         messages.addAll(agent.getMemory().messages().stream().skip(2).collect(Collectors.toList()));
         messages.add(UserMessage.from(
-            StrUtil.format(COMPRESS_RESEARCH_HUMAN_MESSAGE, Map.of("research_topic", state.getResearchTopic()))));
+            StrUtil.format(COMPRESS_RESEARCH_HUMAN_MESSAGE, Map.of("research_topic", researchTopic))));
 
         ChatRequest compressRequest = ChatRequest.builder()
                 .messages(messages)
@@ -192,12 +192,11 @@ public class ResearcherAgent {
         state.setTotalOutputTokens(state.getTotalOutputTokens() + tokenUsage.outputTokenCount());
         String compressedResearch = compressResponse.aiMessage().text();
 
-        state.setCompressedResearch(compressedResearch);
         String preview = compressedResearch.length() > 200
                 ? compressedResearch.substring(0, 200) + "..."
                 : compressedResearch;
         eventPublisher.publishEvent(state.getResearchId(), EventType.RESEARCH,
-                "已完成该主题研究", preview, state.getCurrentResearchEventId());
+                "已完成该主题研究", preview, researchEventId);
 
         return compressedResearch;
     }
