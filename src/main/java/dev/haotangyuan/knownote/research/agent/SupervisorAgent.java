@@ -94,6 +94,13 @@ public class SupervisorAgent {
 
             action(agent, toolExecutionRequests, state);
 
+            // P5 fix: hard-exit when conduct quota is exhausted
+            if (state.getConductCount() >= maxConductCount) {
+                log.info("Conduct quota exhausted ({}/{}), exiting supervisor loop for researchId={}",
+                        state.getConductCount(), maxConductCount, state.getResearchId());
+                break;
+            }
+
             if (toolExecutionRequests.stream()
                     .anyMatch(toolRequest -> "researchComplete".equals(toolRequest.name()))) {
                 break;
@@ -123,10 +130,17 @@ public class SupervisorAgent {
                 String researchTopic;
                 try {
                     var argsNode = objectMapper.readTree(toolExecutionRequest.arguments());
-                    researchTopic = argsNode.get("researchTopic").asText();
+                    researchTopic = (argsNode != null && argsNode.has("researchTopic")) ? argsNode.get("researchTopic").asText() : null;
                 } catch (Exception e) {
-                    log.error("Failed to parse conductResearch arguments", e);
-                    throw new WorkflowException("Failed to parse conductResearch arguments", e);
+                    log.error("Failed to parse conductResearch arguments for researchId={}", state.getResearchId(), e);
+                    String errResult = "工具参数解析失败，请重新调用并提供正确的JSON格式";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, errResult));
+                    continue;
+                }
+                if (researchTopic == null || researchTopic.isBlank()) {
+                    String errResult = "缺少必填参数 researchTopic，请重新调用并提供研究主题";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, errResult));
+                    continue;
                 }
 
                 Long planEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.SUPERVISOR,
