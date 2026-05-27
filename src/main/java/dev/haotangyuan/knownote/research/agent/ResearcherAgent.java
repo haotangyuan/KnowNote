@@ -5,6 +5,9 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.research.data.EventType;
+import dev.haotangyuan.knownote.research.framework.Agent;
+import dev.haotangyuan.knownote.research.framework.AgentContext;
+import dev.haotangyuan.knownote.research.framework.Msg;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.haotangyuan.knownote.research.tool.ToolRegistry;
@@ -37,7 +40,7 @@ import static dev.haotangyuan.knownote.research.prompt.ResearcherPrompts.*;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class ResearcherAgent {
+public class ResearcherAgent implements Agent {
     private final ModelHandler modelHandler;
     private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
@@ -199,5 +202,21 @@ public class ResearcherAgent {
                 "已完成该主题研究", preview, researchEventId);
 
         return compressedResearch;
+    }
+
+    // ── Agent interface ─────────────────────────────────────────────────────
+
+    @Override
+    public String name() {
+        return "researcher-agent";
+    }
+
+    @Override
+    public Msg reply(Msg input, AgentContext ctx) {
+        DeepResearchState state = input.contentAs(DeepResearchState.class);
+        String researchTopic = (String) input.metadata().get("researchTopic");
+        Long parentEventId = (Long) input.metadata().get("parentEventId");
+        String result = run(state, researchTopic, parentEventId);
+        return Msg.of("assistant", name(), result);
     }
 }

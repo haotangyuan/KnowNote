@@ -8,6 +8,9 @@ import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.common.util.MemoryUtil;
 import dev.haotangyuan.knownote.research.data.EventType;
 import dev.haotangyuan.knownote.research.data.WorkflowStatus;
+import dev.haotangyuan.knownote.research.framework.Agent;
+import dev.haotangyuan.knownote.research.framework.AgentContext;
+import dev.haotangyuan.knownote.research.framework.Msg;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.schema.ScopeSchema;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
@@ -34,7 +37,7 @@ import static dev.haotangyuan.knownote.research.prompt.ScopePrompts.TRANSFORM_ME
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class ScopeAgent {
+public class ScopeAgent implements Agent {
     private final ModelHandler modelHandler;
     private final ObjectMapper objectMapper;
     private final EventPublisher eventPublisher;
@@ -133,5 +136,20 @@ public class ScopeAgent {
             log.error("Failed to parse JSON response: {}", jsonResponse, e);
             state.setStatus(WorkflowStatus.FAILED);
         }
+    }
+
+    // ── Agent interface ─────────────────────────────────────────────────────
+
+    @Override
+    public String name() {
+        return "scope-agent";
+    }
+
+    @Override
+    public Msg reply(Msg input, AgentContext ctx) {
+        DeepResearchState state = input.contentAs(DeepResearchState.class);
+        run(state);
+        String output = state.getResearchBrief() != null ? state.getResearchBrief() : state.getStatus();
+        return Msg.of("assistant", name(), output);
     }
 }

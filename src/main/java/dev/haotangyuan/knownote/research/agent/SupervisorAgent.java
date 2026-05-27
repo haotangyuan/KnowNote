@@ -7,6 +7,9 @@ import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.research.data.EventType;
 import dev.haotangyuan.knownote.research.data.WorkflowStatus;
 import dev.haotangyuan.knownote.research.exception.WorkflowException;
+import dev.haotangyuan.knownote.research.framework.Agent;
+import dev.haotangyuan.knownote.research.framework.AgentContext;
+import dev.haotangyuan.knownote.research.framework.Msg;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.haotangyuan.knownote.research.tool.ToolRegistry;
@@ -37,7 +40,7 @@ import static dev.haotangyuan.knownote.research.prompt.SupervisorPrompts.LEAD_RE
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class SupervisorAgent {
+public class SupervisorAgent implements Agent {
     private final ModelHandler modelHandler;
     private final ObjectMapper objectMapper;
     private final ToolRegistry toolRegistry;
@@ -171,5 +174,19 @@ public class SupervisorAgent {
             agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
         }
         return conductCount;
+    }
+
+    // ── Agent interface ─────────────────────────────────────────────────────
+
+    @Override
+    public String name() {
+        return "supervisor-agent";
+    }
+
+    @Override
+    public Msg reply(Msg input, AgentContext ctx) {
+        DeepResearchState state = input.contentAs(DeepResearchState.class);
+        run(state);
+        return Msg.of("assistant", name(), state.getSupervisorNotes());
     }
 }
