@@ -1,7 +1,6 @@
 package dev.haotangyuan.knownote.research.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.haotangyuan.knownote.research.exception.WorkflowException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,10 +19,10 @@ class SupervisorAgentJsonParseTest {
     private String parseTopicDefensively(ObjectMapper mapper, String arguments) {
         try {
             var argsNode = mapper.readTree(arguments);
-            if (argsNode == null || !argsNode.has("topic")) {
+            if (argsNode == null || !argsNode.has("researchTopic")) {
                 return null;
             }
-            return argsNode.get("topic").asText();
+            return argsNode.get("researchTopic").asText();
         } catch (Exception e) {
             return null;
         }
@@ -32,7 +31,7 @@ class SupervisorAgentJsonParseTest {
     @Test
     void validJson_parsesTopic() {
         ObjectMapper mapper = new ObjectMapper();
-        String topic = parseTopicDefensively(mapper, "{\"topic\": \"AI ethics\"}");
+        String topic = parseTopicDefensively(mapper, "{\"researchTopic\": \"AI ethics\"}");
         assertThat(topic).isEqualTo("AI ethics");
     }
 
