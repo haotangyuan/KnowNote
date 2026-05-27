@@ -5,7 +5,6 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.haotangyuan.knownote.common.util.EventPublisher;
 import dev.haotangyuan.knownote.research.data.EventType;
-import dev.haotangyuan.knownote.research.exception.WorkflowException;
 import dev.haotangyuan.knownote.research.model.ModelHandler;
 import dev.haotangyuan.knownote.research.state.DeepResearchState;
 import dev.haotangyuan.knownote.research.tool.ToolRegistry;
@@ -115,25 +114,32 @@ public class ResearcherAgent {
                     continue;
                 }
 
+                String query;
+                int maxResults;
+                String topic;
                 try {
                     var argsNode = objectMapper.readTree(toolExecutionRequest.arguments());
-                    String query = argsNode.get("query").asText();
-                    int maxResults = argsNode.has("maxResults") ? argsNode.get("maxResults").asInt() : 3;
-                    String topic = argsNode.has("topic") ? argsNode.get("topic").asText() : "general";
-
-                    state.setQuery(query);
-                    state.setMaxResults(maxResults);
-                    state.setTopic(topic);
-                    state.setSearchResults(new HashMap<>());
-                    state.setSearchNotes(new ArrayList<>());
-
-                    result = searchAgent.run(state);
-
-                    state.setSearchCount(state.getSearchCount() + 1);
+                    if (argsNode == null || !argsNode.has("query")) {
+                        result = "缺少必填参数 query，请重新调用并提供搜索关键词";
+                        agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
+                        continue;
+                    }
+                    query = argsNode.get("query").asText();
+                    maxResults = argsNode.has("maxResults") ? argsNode.get("maxResults").asInt() : 3;
+                    topic = argsNode.has("topic") ? argsNode.get("topic").asText() : "general";
                 } catch (Exception e) {
-                    log.error("Failed to parse tavilySearch arguments", e);
-                    throw new WorkflowException("Failed to parse tavilySearch arguments", e);
+                    log.error("Failed to parse tavilySearch arguments for researchId={}", state.getResearchId(), e);
+                    result = "工具参数解析失败，请重新调用并提供正确的JSON格式";
+                    agent.getMemory().add(ToolExecutionResultMessage.from(toolExecutionRequest, result));
+                    continue;
                 }
+
+                state.setSearchResults(new HashMap<>());
+                state.setSearchNotes(new ArrayList<>());
+
+                result = searchAgent.run(query, maxResults, topic, state.getCurrentResearchEventId(), state);
+
+                state.setSearchCount(state.getSearchCount() + 1);
             } else {
                 var executor = toolRegistry.getExecutor(toolExecutionRequest.name());
                 if (executor == null) {

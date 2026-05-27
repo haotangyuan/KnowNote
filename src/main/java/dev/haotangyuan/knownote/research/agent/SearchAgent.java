@@ -37,10 +37,10 @@ public class SearchAgent {
     private final ObjectMapper objectMapper;
     private final EventPublisher eventPublisher;
 
-    public String run(DeepResearchState state) {
+    public String run(String query, int maxResults, String topic,
+                      Long parentEventId, DeepResearchState state) {
         Long searchEventId = eventPublisher.publishEvent(state.getResearchId(), EventType.SEARCH,
-                "正在搜索: " + state.getQuery(), null, state.getCurrentResearchEventId());
-        state.setCurrentSearchEventId(searchEventId);
+                "正在搜索: " + query, null, parentEventId);
 
         AgentAbility agent = AgentAbility.builder()
                 .memory(MessageWindowChatMemory.withMaxMessages(100))
@@ -48,21 +48,22 @@ public class SearchAgent {
                 .streamingChatModel(modelHandler.getStreamModel(state.getResearchId()))
                 .build();
 
-        plan(state);
-        action(agent, state);
-        return summarize(agent, state);
+        plan(query, maxResults, topic, searchEventId, state);
+        action(agent, searchEventId, state);
+        return summarize(query, searchEventId, agent, state);
     }
 
-    private void plan(DeepResearchState state) {
+    private void plan(String query, int maxResults, String topic,
+                      Long searchEventId, DeepResearchState state) {
         TavilyClient.TavilyResponse response = tavilyClient.search(
-            state.getQuery(),
-            state.getMaxResults(),
-            state.getTopic(),
+            query,
+            maxResults,
+            topic,
             true
         );
 
         if (response.results().isEmpty()) {
-            log.warn("No search results for: {}", state.getQuery());
+            log.warn("No search results for: {}", query);
             return;
         }
 
@@ -75,11 +76,11 @@ public class SearchAgent {
 
         state.setSearchResults(uniqueResults);
         eventPublisher.publishEvent(state.getResearchId(), EventType.SEARCH,
-                "找到 " + uniqueResults.size() + " 个相关结果", null, state.getCurrentSearchEventId());
+                "找到 " + uniqueResults.size() + " 个相关结果", null, searchEventId);
     }
 
-    private void action(AgentAbility agent, DeepResearchState state) {
-        if (state.getSearchResults().isEmpty()) {
+    private void action(AgentAbility agent, Long searchEventId, DeepResearchState state) {
+        if (state.getSearchResults() == null || state.getSearchResults().isEmpty()) {
             log.warn("No search results to process");
             return;
         }
@@ -153,16 +154,16 @@ public class SearchAgent {
         }
     }
 
-    private String summarize(AgentAbility agent, DeepResearchState state) {
-        if (state.getSearchNotes().isEmpty()) {
-            return "No search results found for: " + state.getQuery();
+    private String summarize(String query, Long searchEventId, AgentAbility agent, DeepResearchState state) {
+        if (state.getSearchNotes() == null || state.getSearchNotes().isEmpty()) {
+            return "No search results found for: " + query;
         }
         eventPublisher.publishEvent(state.getResearchId(), EventType.SEARCH,
-                "已分析并整理搜索结果", null, state.getCurrentSearchEventId());
+                "已分析并整理搜索结果", null, searchEventId);
 
         StringBuilder output = new StringBuilder();
         output.append(StrUtil.format("Search results for query: '{query}'\n\n",
-                Map.of("query", state.getQuery())));
+                Map.of("query", query)));
 
         int num = 1;
         for (String result : state.getSearchNotes()) {
