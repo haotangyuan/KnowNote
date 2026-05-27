@@ -35,6 +35,9 @@ build/
 .env
 *.log
 
+### Worktrees ###
+.worktrees/
+
 ### Development / AI tools ###
 CLAUDE.md
 AGENTS.md
