@@ -34,6 +34,7 @@ public class JwtFilter implements Filter {
 
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/v1/auth/**",
+            "/api/v1/studio/**",   // Studio demo — no auth required
             "/actuator/**",
             "/error",
             "/v3/api-docs/**",

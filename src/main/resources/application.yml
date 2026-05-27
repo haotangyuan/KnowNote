@@ -96,3 +96,7 @@ springdoc:
 
 scalar:
   path: /docs
+
+studio:
+  service:
+    url: ${STUDIO_SERVICE_URL:http://localhost:3001}

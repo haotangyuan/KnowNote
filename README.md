@@ -1,11 +1,12 @@
 # KnowNote — 知识写作平台
 
-基于 Spring Boot 3 的知识写作与深度研究平台，提供 AI 多智能体协作研究、文章版本管理、内容审核等功能。
+基于 Spring Boot 3 的知识写作与深度研究平台，提供 AI 多智能体协作研究、AI 辅助代码生成（Studio）、文章版本管理、内容审核等功能。
 
 ## 功能特性
 
 - **用户认证** — 邮箱验证码/密码登录 + Google OAuth，JWT 双令牌（access + refresh）
 - **深度研究** — 多智能体协作（ScopeAgent → SupervisorAgent → ResearcherAgent → ReportAgent），SSE 实时推送进度
+- **Studio（AI 代码生成）** — 类 Bolt.new 的浏览器端 IDE，对话式生成代码、沙盒容器实时运行预览
 - **文章管理** — Markdown 编辑、版本历史、草稿/发布状态、版本回滚
 - **内容审核** — RocketMQ 异步审核，LLM 判定合规性后自动流转状态
 - **点赞系统** — 异步消息队列聚合计数
@@ -14,7 +15,7 @@
 
 | 类别 | 技术 |
 |------|------|
-| 语言 / 框架 | Java 17 + Spring Boot 3.5 |
+| 语言 / 框架 | Java 21 + Spring Boot 3.5 |
 | 构建工具 | Maven |
 | ORM | MyBatis-Plus |
 | 数据库 | MySQL 8.0 |
@@ -22,6 +23,8 @@
 | 消息队列 | RocketMQ |
 | 对象存储 | MinIO（S3 兼容） |
 | LLM 框架 | LangChain4j 1.8 |
+| Studio 沙盒服务 | Node.js 20 + Fastify + Dockerode |
+| Studio 前端 | React 18 + Vite + Monaco Editor |
 | API 文档 | SpringDoc OpenAPI + Scalar UI |
 | 邮件 | Resend |
 | 认证 | JWT（jjwt 0.12）+ jBCrypt |
@@ -201,32 +204,41 @@ stateDiagram-v2
 ## 项目结构
 
 ```
-src/main/java/dev/haotangyuan/knownote/
-├── common/                     # 通用组件
-│   ├── async/                  # @QueuedAsync 异步任务队列
-│   ├── sse/                    # SSE 实时推送
-│   └── util/                   # 缓存、事件发布、序列号等工具
-├── config/                     # 配置类（JWT、OSS、RocketMQ、LLM、OpenAPI）
-├── user/                       # 用户模块
-│   ├── api/                    # Controller + DTO
-│   ├── domain/                 # Entity + Mapper
-│   └── service/                # 认证、Token、Google OAuth、验证码
-├── research/                   # 深度研究模块
-│   ├── agent/                  # Scope / Supervisor / Researcher / Search / Report
-│   ├── tool/                   # 工具注册中心（@ResearcherTool / @SupervisorTool）
-│   ├── workflow/               # AgentPipeline 流水线
-│   ├── state/                  # DeepResearchState
-│   ├── prompt/                 # Prompt 模板
-│   ├── schema/                 # LLM 结构化输出 Schema
-│   └── client/                 # Tavily 搜索客户端
-├── post/                       # 文章模块
-│   ├── api/                    # Controller + DTO
-│   ├── domain/                 # Entity + Mapper + Enum
-│   ├── service/                # 文章 CRUD、版本管理
-│   └── mq/                     # 审核消息（Producer / Consumer / DLQ / Reviewer）
-├── storage/                    # 存储模块（MinIO S3 预签名上传）
-├── like/                       # 点赞模块（MQ 异步聚合）
-└── count/                      # 计数模块（MQ 消费计数变更）
+KnowNote/
+├── src/main/java/dev/haotangyuan/knownote/   # Spring Boot 后端
+│   ├── common/                     # 通用组件（异步队列、SSE、工具类）
+│   ├── config/                     # 配置类（JWT、OSS、RocketMQ、LLM、OpenAPI）
+│   ├── user/                       # 用户模块（认证、Token、Google OAuth）
+│   ├── research/                   # 深度研究模块（多智能体工作流）
+│   │   ├── agent/                  # Scope / Supervisor / Researcher / Report
+│   │   ├── tool/                   # 工具注册（@ResearcherTool / @SupervisorTool）
+│   │   ├── workflow/               # AgentPipeline 流水线
+│   │   └── client/                 # Tavily 搜索客户端
+│   ├── post/                       # 文章模块（CRUD、版本、审核 MQ）
+│   ├── studio/                     # Studio AI 代码生成模块
+│   │   ├── api/                    # StudioProjectController + DTO
+│   │   ├── agent/                  # CodeGenAgent（LangChain4j 流式调用）
+│   │   ├── pipeline/               # CodeGenPipeline（Architect + Coder 两阶段）
+│   │   ├── config/                 # StudioModelConfig（LLM Bean 注册）
+│   │   ├── domain/                 # StudioProjectDO + Mapper
+│   │   ├── service/                # StudioProjectService（项目 CRUD + 生成调度）
+│   │   └── sse/                    # StudioSseHub（SSE 事件推送）
+│   ├── storage/                    # 存储模块（MinIO S3 预签名上传）
+│   ├── like/                       # 点赞模块（MQ 异步聚合）
+│   └── count/                      # 计数模块（MQ 消费计数变更）
+├── studio-service/                 # Node.js 沙盒管理服务（Fastify）
+│   └── src/
+│       ├── ContainerManager.ts     # Docker 容器生命周期管理
+│       ├── FileService.ts          # 工作区文件读写
+│       └── routes/                 # REST 路由（containers / files / preview）
+├── studio-frontend/                # React 前端（Vite + Monaco Editor）
+│   └── src/
+│       ├── components/             # ChatPanel / EditorPanel / PreviewPanel
+│       ├── hooks/                  # useSseStream / useContainerWs
+│       └── store/                  # Zustand 全局状态
+└── sandbox-image/                  # 沙盒容器 Docker 镜像（Node.js + Vite）
+    ├── Dockerfile
+    └── workspace-template/         # 初始项目模板（React + Vite）
 ```
 
 ## 快速开始
@@ -235,11 +247,12 @@ src/main/java/dev/haotangyuan/knownote/
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
-| JDK | 17+ | [Adoptium 下载](https://adoptium.net/) |
+| JDK | 21+ | [Adoptium 下载](https://adoptium.net/) 或 `brew install openjdk@21` |
 | Maven | 3.6+ | 项目自带 mvnw wrapper，无需全局安装 |
+| Node.js | 20+ | studio-service 依赖，`brew install node` |
 | MySQL | 8.0+ | `brew install mysql` 或 [官方下载](https://dev.mysql.com/downloads/) |
 | Redis | 6.0+ | `brew install redis && brew services start redis` |
-| Docker | 20.10+ | RocketMQ + MinIO 需要，[Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Docker | 20.10+ | RocketMQ + MinIO + Studio 沙盒，[Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
 ### 2. 克隆项目
 
@@ -311,7 +324,7 @@ cp .env.example .env
 
 > 其余变量（MinIO、RocketMQ、Redis 等）已预设本地默认值，直接使用 Docker 服务即可，无需修改。
 
-### 6. 启动应用
+### 6. 启动后端应用
 
 ```bash
 # 加载环境变量并启动
@@ -326,7 +339,49 @@ set -a && source .env && set +a && ./mvnw spring-boot:run
 - **API 文档**：`http://localhost:8080/docs`（Scalar UI，无需登录）
 - **健康检查**：`http://localhost:8080/actuator/health`
 
-### 7. 功能启用状态
+### 7. 启动 Studio 服务（可选）
+
+Studio 功能需要额外启动两个服务：沙盒管理服务（studio-service）和前端开发服务（studio-frontend）。
+
+**7.1 构建沙盒镜像（首次执行一次）：**
+
+```bash
+cd sandbox-image
+docker build -t knownote-studio-sandbox:latest .
+cd ..
+```
+
+**7.2 配置并启动 studio-service：**
+
+```bash
+cd studio-service
+npm install
+
+# 创建 .env 文件（按实际路径修改 DOCKER_SOCKET 和 WORKSPACE_BASE）
+cat > .env << 'EOF'
+PORT=3001
+DOCKER_SOCKET=/var/run/docker.sock
+WORKSPACE_BASE=/tmp/knownote-studio
+SANDBOX_IMAGE=knownote-studio-sandbox:latest
+HOST_NAME=localhost
+EOF
+
+npm run dev
+```
+
+> macOS + colima 用户：`DOCKER_SOCKET` 设为 `~/.colima/default/docker.sock`，`WORKSPACE_BASE` 设为 `$HOME` 下的目录（colima 默认只挂载 `$HOME`）。
+
+**7.3 启动 Studio 前端（开发模式）：**
+
+```bash
+cd studio-frontend
+npm install
+npm run dev
+```
+
+Studio 前端运行于 `http://localhost:5173`。
+
+### 8. 功能启用状态
 
 | 功能 | 依赖 | 默认状态 |
 |------|------|---------|
@@ -337,8 +392,11 @@ set -a && source .env && set +a && ./mvnw spring-boot:run
 | 文章 CRUD | MinIO | 可用（Docker 已启动） |
 | 文章发布/审核 | MinIO + RocketMQ | 可用 |
 | 点赞 | RocketMQ + Redis | 可用 |
+| Studio 项目管理 | MySQL + studio-service | 可用 |
+| Studio AI 代码生成 | LLM API + studio-service | 配置 API Key 后可用 |
+| Studio 沙盒预览 | Docker + studio-service | 可用（Docker 已启动） |
 
-### 8. 快速测试
+### 9. 快速测试
 
 ```bash
 # 1. 发送验证码（未配 Resend 则验证码打印在日志中）
@@ -422,3 +480,33 @@ curl -X POST http://localhost:8080/api/v1/research/create \
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/url` | 获取预签名上传 URL |
+
+### Studio `/api/v1/studio`
+
+> Studio 接口无需 Bearer Token 认证（开发模式），生产部署时应启用鉴权。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | Studio 健康检查 |
+| POST | `/projects` | 创建 Studio 项目 |
+| GET | `/projects` | 列出当前用户的项目 |
+| GET | `/projects/{projectId}` | 获取项目详情 |
+| POST | `/projects/{projectId}/generate` | AI 代码生成（SSE 流式返回） |
+| GET | `/projects/{projectId}/events` | SSE 断线重连（Last-Event-ID） |
+| GET | `/projects/{projectId}/container/status` | 获取沙盒容器状态 |
+
+### Studio 沙盒服务（studio-service，端口 3001）
+
+> 由 Node.js/Fastify 提供，Spring Boot 后端代理调用，前端不直接访问。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| POST | `/containers/:projectId/start` | 启动沙盒容器 |
+| DELETE | `/containers/:projectId/stop` | 停止并删除容器 |
+| GET | `/containers/:projectId/status` | 获取容器状态 |
+| GET | `/files/:projectId` | 列出工作区文件 |
+| GET | `/files/:projectId/*` | 读取文件内容 |
+| PUT | `/files/:projectId/*` | 写入文件内容 |
+| GET | `/preview/:projectId` | HTTP 反代沙盒预览服务 |
+| GET | `/ws/:projectId` | WebSocket 反代沙盒 HMR |
