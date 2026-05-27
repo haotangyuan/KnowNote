@@ -12,19 +12,21 @@
 
 ## 技术栈
 
-| 类别 | 技术 |
-|------|------|
-| 语言 / 框架 | Java 17 + Spring Boot 3.5 |
-| 构建工具 | Maven |
-| ORM | MyBatis-Plus |
-| 数据库 | MySQL 8.0 |
-| 缓存 | Redis（Redisson） |
-| 消息队列 | RocketMQ |
-| 对象存储 | MinIO（S3 兼容） |
-| LLM 框架 | LangChain4j 1.8 |
-| API 文档 | SpringDoc OpenAPI + Scalar UI |
-| 邮件 | Resend |
-| 认证 | JWT（jjwt 0.12）+ jBCrypt |
+| 类别 | 技术 | 版本 |
+|------|------|------|
+| 语言 / 框架 | Java + Spring Boot | Java 21 + Spring Boot 3.5.9 |
+| 构建工具 | Maven | 3.9.12（项目自带 mvnw wrapper） |
+| ORM | MyBatis-Plus | 3.5.11 |
+| 数据库 | MySQL | 8.0+（驱动 mysql-connector-j 9.5.0） |
+| 缓存 | Redis + Redisson | Redis 6.0+ / Redisson 3.52.0 |
+| 消息队列 | RocketMQ | 5.3.1（rocketmq-spring-boot-starter 2.3.1） |
+| 对象存储 | MinIO（S3 兼容） | latest（AWS SDK S3 2.25.45） |
+| LLM 框架 | LangChain4j | 1.8.0 |
+| API 文档 | SpringDoc OpenAPI + Scalar UI | 2.8.14 |
+| 邮件 | Resend | — |
+| 认证 | JWT（jjwt）+ jBCrypt | jjwt 0.12.6 / jBCrypt 0.4 |
+| 工具库 | Hutool / Lombok | Hutool 5.8.34 / Lombok 1.18.34 |
+| Google OAuth | Google API Client | 2.7.2 |
 
 ## 系统架构
 
@@ -235,8 +237,8 @@ src/main/java/dev/haotangyuan/knownote/
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
-| JDK | 17+ | [Adoptium 下载](https://adoptium.net/) |
-| Maven | 3.6+ | 项目自带 mvnw wrapper，无需全局安装 |
+| JDK | 21+ | [Adoptium 下载](https://adoptium.net/) 或 `brew install openjdk@21` |
+| Maven | 3.9+ | 项目自带 mvnw wrapper，无需全局安装 |
 | MySQL | 8.0+ | `brew install mysql` 或 [官方下载](https://dev.mysql.com/downloads/) |
 | Redis | 6.0+ | `brew install redis && brew services start redis` |
 | Docker | 20.10+ | RocketMQ + MinIO 需要，[Docker Desktop](https://www.docker.com/products/docker-desktop/) |
